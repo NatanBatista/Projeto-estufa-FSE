@@ -4,7 +4,8 @@
 #define pho_PIN 2
 #define led_PIN 14
 #define DHT_PIN 15
-#define SERVO_PIN 32
+#define SERVO_TEMP_PIN 32
+#define LED_UMI_PIN 33
 #define BLYNK_PRINT Serial
 
 
@@ -16,6 +17,8 @@
 
 
 bool manual = false;
+int temp_maxi;
+int umidade_min;
 char auth[] = BLYNK_AUTH_TOKEN;
 char ssid[] = "Wokwi-GUEST";
 char pass[] = "";
@@ -23,7 +26,7 @@ char pass[] = "";
 
 DHTesp dhtSensor;    //Criando os objetos
 BlynkTimer timer;
-Servo sv; 
+Servo sv1;
 
 
 
@@ -47,9 +50,26 @@ BLYNK_WRITE(V8)   //Receber valores o blynk
   int value = param.asInt();
 
   // Update state
-  sv.write(value);
+  sv1.write(value);
 }
 
+BLYNK_WRITE(V9)   //Receber valores o blynk
+{
+
+  int value = param.asInt();
+
+  // Update state
+  temp_maxi = value;
+}
+
+BLYNK_WRITE(V10)   //Receber valores o blynk
+{
+
+  int value = param.asInt();
+
+  // Update state
+  umidade_min = value;
+}
 
 
 
@@ -59,22 +79,37 @@ void sendSensor()  //Enviar os valores dos sensores para a dashboard
   if (digitalRead(pho_PIN) == LOW) {
     Blynk.virtualWrite(V7, 0);
   } else {Blynk.virtualWrite(V7, 1);}
-
-  segurancaTemp(data.temperature, manual);
+  segurancaUmi(data.humidity, umidade_min);
+  if (manual == 0) {
+    segurancaTemp(data.temperature, temp_maxi);
+  }
+  
 
   Blynk.virtualWrite(V5, data.humidity);
   Blynk.virtualWrite(V6, data.temperature);
   Serial.println(manual);
 }
 
-void segurancaTemp(int temp, bool manual) 
+void segurancaTemp(int temp, int temp_maxi) 
 {
-  if (temp > 24 && manual == false) {
+  if (temp > temp_maxi * 1.1) {
+    Blynk.virtualWrite(V8, 180);
+    sv1.write(180);
+  } else if (temp > temp_maxi) {
     Blynk.virtualWrite(V8, 90);
-    sv.write(50);
-  } else if (7 < temp < 24 && manual == false) {
+    sv1.write(90);
+  } else {
     Blynk.virtualWrite(V8, 0);
-    sv.write(0);
+    sv1.write(0);
+  }
+}
+
+void segurancaUmi(int umi, int umidade_min) 
+{
+  if (umi < umidade_min) {
+    digitalWrite(LED_UMI_PIN, HIGH);
+  } else {
+    digitalWrite(LED_UMI_PIN, LOW);
   }
 }
 
@@ -84,13 +119,14 @@ void setup()
   Serial.begin(115200);
   pinMode(led_PIN, OUTPUT);
   pinMode(pho_PIN, INPUT);
+  pinMode(LED_UMI_PIN, OUTPUT);
   
   dhtSensor.setup(DHT_PIN, DHTesp::DHT22);
   Blynk.begin(auth, ssid, pass);
 
 
-  sv.attach(SERVO_PIN);
-  sv.write(0);
+  sv1.attach(SERVO_TEMP_PIN);
+  sv1.write(0);
 
   timer.setInterval(1000L, sendSensor);  //Intervalo que a função sendSensor vai inviar os valores para o dashboard
 }
